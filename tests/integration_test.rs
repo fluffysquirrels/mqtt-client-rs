@@ -71,6 +71,36 @@ fn pub_and_sub_plain() -> Result<()> {
     })
 }
 
+#[test]
+#[cfg(feature = "websocket")]
+fn pub_and_sub_websocket() -> Result<()> {
+    init_logger();
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let mut c = websocket_client()?;
+        c.connect().await?;
+
+        // Subscribe
+        let subopts = Subscribe::new(vec![
+            SubscribeTopic { qos: QoS::AtMostOnce, topic_path: "test/pub_and_sub_websocket".to_owned() }
+            ]);
+        let subres = c.subscribe(subopts).await?;
+        subres.any_failures()?;
+
+        // Publish
+        let mut p = Publish::new("test/pub_and_sub_websocket".to_owned(), "x".as_bytes().to_vec());
+        p.set_qos(QoS::AtMostOnce);
+        c.publish(&p).await?;
+
+        // Read
+        let r = c.read_subscriptions().await?;
+        assert_eq!(r.topic(), "test/pub_and_sub_websocket");
+        assert_eq!(r.payload(), b"x");
+        c.disconnect().await?;
+        Ok(())
+    })
+}
+
 #[cfg(feature = "tls")]
 #[test]
 fn pub_and_sub_tls() -> Result<()> {
@@ -176,6 +206,15 @@ fn tls_client() -> Result<Client> {
         .set_host("localhost".to_owned())
         .set_port(8883)
         .set_tls_client_config(cc)
+        .set_connect_retry_delay(Duration::from_secs(1))
+        .build()
+}
+
+#[cfg(feature = "websocket")]
+fn websocket_client() -> Result<Client> {
+    Client::builder()
+        .set_host("ws://127.0.0.1:9001".to_owned())
+        .set_websocket()
         .set_connect_retry_delay(Duration::from_secs(1))
         .build()
 }

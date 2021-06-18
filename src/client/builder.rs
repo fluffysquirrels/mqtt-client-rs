@@ -2,6 +2,7 @@ use crate::{
     client::{
         Client,
         ClientOptions,
+        client::ConnectionMode,
         KeepAlive,
     },
     Result,
@@ -32,8 +33,7 @@ pub struct ClientBuilder {
     packet_buffer_len: Option<usize>,
     max_packet_len: Option<usize>,
     operation_timeout: Option<Duration>,
-    #[cfg(feature = "tls")]
-    tls_client_config: Option<Arc<rustls::ClientConfig>>,
+    connection_mode: ConnectionMode,
     automatic_connect: Option<bool>,
     connect_retry_delay: Option<Duration>,
 }
@@ -56,11 +56,7 @@ impl ClientBuilder {
                 packet_buffer_len: self.packet_buffer_len.unwrap_or(100),
                 max_packet_len: self.max_packet_len.unwrap_or(64 * 1024),
                 operation_timeout: self.operation_timeout.unwrap_or(Duration::from_secs(20)),
-                #[cfg(feature = "tls")]
-                tls_client_config: match self.tls_client_config {
-                    Some(ref c) => Some(c.clone()),
-                    None => None,
-                },
+                connection_mode: self.connection_mode.clone(),
                 automatic_connect: self.automatic_connect.unwrap_or(true),
                 connect_retry_delay: self.connect_retry_delay.unwrap_or(Duration::from_secs(30)),
             })
@@ -75,6 +71,8 @@ impl ClientBuilder {
     /// Set TCP port to connect to.
     ///
     /// The default value is 1883.
+    ///
+    /// If using a websocket, this value is ignored. The port should be specified in the host URL.
     pub fn set_port(&mut self, port: u16) -> &mut Self {
         self.port = Some(port);
         self
@@ -150,7 +148,22 @@ impl ClientBuilder {
     /// Enables TLS. By default TLS is disabled.
     #[cfg(feature = "tls")]
     pub fn set_tls_client_config(&mut self, tls_client_config: rustls::ClientConfig) -> &mut Self {
-        self.tls_client_config = Some(Arc::new(tls_client_config));
+        self.connection_mode = ConnectionMode::Tls(Arc::new(tls_client_config));
+        self
+    }
+
+    #[cfg(feature = "websocket")]
+    /// Set the connection to use a websocket
+    pub fn set_websocket(&mut self) -> &mut Self {
+        self.connection_mode = ConnectionMode::Websocket;
+        self
+    }
+
+    /// Sets the connection mode to the given value
+    ///
+    /// The default is to use Tcp
+    pub fn set_connection_mode(&mut self, mode: ConnectionMode) -> &mut Self {
+        self.connection_mode = mode;
         self
     }
 
